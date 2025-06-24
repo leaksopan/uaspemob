@@ -10,6 +10,7 @@ import '../viewmodels/expense_viewmodel.dart';
 import '../utils/formatters.dart';
 import 'package:permission_handler/permission_handler.dart';
 import './camera_page.dart';
+import 'package:path/path.dart' as path;
 
 class AddExpensePage extends StatefulWidget {
   const AddExpensePage({super.key});
@@ -83,6 +84,50 @@ class _AddExpensePageState extends State<AddExpensePage> {
         );
       },
     );
+  }
+
+  // Fungsi untuk menyimpan gambar ke folder assets/images/
+  Future<String?> _saveImageToAssets(XFile imageFile) async {
+    try {
+      final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+      final String fileName = 'expense_$timestamp.jpg';
+
+      if (kIsWeb) {
+        // Untuk web, simpan sebagai data URL base64
+        final Uint8List bytes = await imageFile.readAsBytes();
+        final String base64String = base64Encode(bytes);
+        final String dataUrl = 'data:image/jpeg;base64,$base64String';
+        return dataUrl;
+      } else {
+        // Untuk mobile/desktop, simpan ke folder assets
+        // Path ke folder assets/images di workspace
+        final String assetsPath = path.join(
+          Directory.current.path,
+          'assets',
+          'images',
+        );
+
+        // Pastikan folder ada
+        final Directory assetsDir = Directory(assetsPath);
+        if (!await assetsDir.exists()) {
+          await assetsDir.create(recursive: true);
+        }
+
+        // Path file tujuan
+        final String filePath = path.join(assetsPath, fileName);
+
+        // Copy file ke folder assets
+        final File destinationFile = File(filePath);
+        final Uint8List bytes = await imageFile.readAsBytes();
+        await destinationFile.writeAsBytes(bytes);
+
+        // Return path relatif yang akan disimpan di database
+        return 'assets/images/$fileName';
+      }
+    } catch (e) {
+      print('Error saving image to assets: $e');
+      return null;
+    }
   }
 
   void _showImageSourceDialog(ExpenseViewModel expenseViewModel) {
@@ -589,8 +634,7 @@ class _AddExpensePageState extends State<AddExpensePage> {
   Widget _buildImageWidget() {
     if (_imagePath == null) return Container();
 
-    // Cek apakah ini data URL (untuk web) atau file path (untuk mobile)
-    if (_imagePath!.startsWith('data:image/')) {
+    if (kIsWeb || _imagePath!.startsWith('data:image/')) {
       // Untuk web dengan data URL
       return Image.network(
         _imagePath!,
@@ -613,9 +657,11 @@ class _AddExpensePageState extends State<AddExpensePage> {
         },
       );
     } else {
-      // Untuk mobile dengan file path
+      // Untuk mobile/desktop dengan file path
+      final String fullPath = path.join(Directory.current.path, _imagePath!);
+
       return Image.file(
-        File(_imagePath!),
+        File(fullPath),
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) {
           return Container(
@@ -661,22 +707,31 @@ class _AddExpensePageState extends State<AddExpensePage> {
       );
 
       if (imageFile != null) {
-        // Konversi gambar yang didapat ke format base64
-        final Uint8List bytes = await imageFile.readAsBytes();
-        final String base64String = base64Encode(bytes);
-        final String dataUrl = 'data:image/jpeg;base64,$base64String';
+        // Simpan gambar ke folder assets/images/
+        final String? savedPath = await _saveImageToAssets(imageFile);
 
-        setState(() {
-          _imagePath = dataUrl;
-        });
+        if (savedPath != null) {
+          setState(() {
+            _imagePath = savedPath;
+          });
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Foto berhasil diambil dari webcam'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Foto berhasil diambil dan disimpan'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Gagal menyimpan foto'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
         }
       }
     } else {
@@ -694,36 +749,80 @@ class _AddExpensePageState extends State<AddExpensePage> {
         return;
       }
 
-      String? imagePath = await expenseViewModel.pickImageFromCamera();
-      if (imagePath != null) {
-        setState(() {
-          _imagePath = imagePath;
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Foto berhasil diambil'),
-              backgroundColor: Colors.green,
-            ),
-          );
+      // Ambil gambar menggunakan image picker
+      final ImagePicker picker = ImagePicker();
+      final XFile? imageFile = await picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+
+      if (imageFile != null) {
+        // Simpan gambar ke folder assets/images/
+        final String? savedPath = await _saveImageToAssets(imageFile);
+
+        if (savedPath != null) {
+          setState(() {
+            _imagePath = savedPath;
+          });
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Foto berhasil diambil dan disimpan'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Gagal menyimpan foto'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
         }
       }
     }
   }
 
   Future<void> _pickImageFromGallery(ExpenseViewModel expenseViewModel) async {
-    String? imagePath = await expenseViewModel.pickImageFromGallery();
-    if (imagePath != null) {
-      setState(() {
-        _imagePath = imagePath;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Foto berhasil dipilih'),
-            backgroundColor: Colors.green,
-          ),
-        );
+    // Ambil gambar menggunakan image picker
+    final ImagePicker picker = ImagePicker();
+    final XFile? imageFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 85,
+    );
+
+    if (imageFile != null) {
+      // Simpan gambar ke folder assets/images/
+      final String? savedPath = await _saveImageToAssets(imageFile);
+
+      if (savedPath != null) {
+        setState(() {
+          _imagePath = savedPath;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Foto berhasil dipilih dan disimpan'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Gagal menyimpan foto'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }

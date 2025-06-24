@@ -7,6 +7,7 @@ import '../models/expense.dart';
 import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/expense_viewmodel.dart';
 import '../utils/formatters.dart';
+import 'package:path/path.dart' as path;
 
 class ExpenseListPage extends StatefulWidget {
   const ExpenseListPage({super.key});
@@ -105,84 +106,108 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.blue.shade50,
-          child: Icon(
-            _getCategoryIcon(expense.category),
-            color: Colors.blue.shade600,
-          ),
-        ),
-        title: Text(
-          expense.title,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Row(
           children: [
-            Text(expense.category),
-            Text(
-              Formatters.formatRelativeDate(expense.date),
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            // Leading icon
+            CircleAvatar(
+              backgroundColor: Colors.blue.shade50,
+              child: Icon(
+                _getCategoryIcon(expense.category),
+                color: Colors.blue.shade600,
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // Content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    expense.title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    expense.category,
+                    style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    Formatters.formatRelativeDate(expense.date),
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+
+            // Trailing section
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  Formatters.formatCurrency(expense.amount),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red.shade600,
+                    fontSize: 14,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                PopupMenuButton<String>(
+                  onSelected:
+                      (value) => _handleMenuAction(
+                        value,
+                        expense,
+                        expenseViewModel,
+                        authViewModel,
+                      ),
+                  icon: Icon(
+                    Icons.more_vert,
+                    size: 18,
+                    color: Colors.grey.shade600,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                  itemBuilder:
+                      (context) => [
+                        const PopupMenuItem(
+                          value: 'detail',
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline, color: Colors.blue),
+                              SizedBox(width: 8),
+                              Text('Lihat Detail'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text(
+                                'Hapus',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                ),
+              ],
             ),
           ],
         ),
-        trailing: SizedBox(
-          width: 120,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                Formatters.formatCurrency(expense.amount),
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.red.shade600,
-                  fontSize: 14,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              PopupMenuButton<String>(
-                onSelected:
-                    (value) => _handleMenuAction(
-                      value,
-                      expense,
-                      expenseViewModel,
-                      authViewModel,
-                    ),
-                icon: const Icon(Icons.more_vert, size: 20),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                itemBuilder:
-                    (context) => [
-                      const PopupMenuItem(
-                        value: 'detail',
-                        child: Row(
-                          children: [
-                            Icon(Icons.info_outline, color: Colors.blue),
-                            SizedBox(width: 8),
-                            Text('Lihat Detail'),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete, color: Colors.red),
-                            SizedBox(width: 8),
-                            Text('Hapus', style: TextStyle(color: Colors.red)),
-                          ],
-                        ),
-                      ),
-                    ],
-              ),
-            ],
-          ),
-        ),
-        isThreeLine: true,
       ),
     );
   }
@@ -274,6 +299,13 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
                         ).format(expense.date),
                       ),
 
+                      // Tampilkan deskripsi jika ada
+                      if (expense.description != null &&
+                          expense.description!.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        _buildDetailRow('Deskripsi', expense.description!),
+                      ],
+
                       const SizedBox(height: 20),
                       SizedBox(
                         width: double.infinity,
@@ -299,36 +331,82 @@ class _ExpenseListPageState extends State<ExpenseListPage> {
   }
 
   Widget _buildImage(String imagePath) {
-    if (kIsWeb) {
-      return Container(
-        color: Colors.grey.shade100,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.image, size: 50, color: Colors.grey.shade400),
-            const SizedBox(height: 8),
-            Text(
-              'Gambar tidak dapat ditampilkan\ndi versi web',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-            ),
-          ],
-        ),
-      );
-    } else {
-      // Untuk platform mobile/desktop, gunakan Image.file()
-      return Image.file(
-        File(imagePath),
+    if (kIsWeb || imagePath.startsWith('data:image/')) {
+      // Untuk web dengan data URL
+      return Image.network(
+        imagePath,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) {
           return Container(
             color: Colors.grey.shade100,
-            child: const Center(
-              child: Icon(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.image_not_supported,
+                  size: 50,
+                  color: Colors.grey,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Gagal memuat gambar',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    } else {
+      // Untuk mobile/desktop dengan file path
+      final String fullPath = path.join(Directory.current.path, imagePath);
+      final File imageFile = File(fullPath);
+
+      // Cek apakah file ada
+      if (!imageFile.existsSync()) {
+        return Container(
+          color: Colors.grey.shade100,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
                 Icons.image_not_supported,
                 size: 50,
-                color: Colors.grey,
+                color: Colors.grey.shade400,
               ),
+              const SizedBox(height: 8),
+              Text(
+                'Gambar tidak ditemukan',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              ),
+            ],
+          ),
+        );
+      }
+
+      return Image.file(
+        imageFile,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            color: Colors.grey.shade100,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.image_not_supported,
+                  size: 50,
+                  color: Colors.grey,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Gagal memuat gambar',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                ),
+              ],
             ),
           );
         },
